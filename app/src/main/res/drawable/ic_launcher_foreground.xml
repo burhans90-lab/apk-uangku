@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Wallet and Coin Symbol in Gold/White -->
+    <group
+        android:translateX="24"
+        android:translateY="24">
+        <!-- Main Wallet Card -->
+        <path
+            android:fillColor="#FFFFFFFF"
+            android:pathData="M52,12H12C8.69,12 6,14.69 6,18v24c0,3.31 2.69,6 6,6h40c3.31,0 6,-2.69 6,-6V18C58,14.69 55.31,12 52,12zM52,36H42v-8h10V36z"/>
+        <!-- Gold Accent Coin/Growth Sparkle -->
+        <path
+            android:fillColor="#FFFFD700"
+            android:pathData="M47,32m-3,0a3,3 0 1,0 6,0a3,3 0 1,0 -6,0"/>
+        <path
+            android:fillColor="#FFFFD700"
+            android:pathData="M16,8h28v3H16z"/>
+    </group>
+</vector>

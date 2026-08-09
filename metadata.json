@@ -1,0 +1,6 @@
+{
+  "name": "UANGKU",
+  "description": "Aplikasi Catatan Keuangan Pribadi Harian UANGKU",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
