@@ -26,8 +26,11 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.material.icons.filled.CloudDone
+import androidx.compose.material.icons.filled.CloudSync
 import com.example.ui.components.AddEditTransactionSheet
 import com.example.ui.components.AddRecurringRuleDialog
+import com.example.ui.components.GoogleDriveSyncDialog
 import com.example.ui.components.SetBudgetDialog
 import com.example.ui.screens.AnalyticsScreen
 import com.example.ui.screens.AutomationScreen
@@ -66,11 +69,13 @@ fun UangkuMainApp(viewModel: UangkuViewModel) {
     var showAddTransactionSheet by remember { mutableStateOf(false) }
     var showBudgetDialog by remember { mutableStateOf(false) }
     var showAddRecurringDialog by remember { mutableStateOf(false) }
+    var showDriveSyncDialog by remember { mutableStateOf(false) }
 
     val dailyBudget by viewModel.dailyBudgetLimit.collectAsState()
     val monthlyBudget by viewModel.monthlyBudgetLimit.collectAsState()
     val minBalanceThreshold by viewModel.minBalanceThreshold.collectAsState()
     val monthlySavingsTarget by viewModel.monthlySavingsTarget.collectAsState()
+    val lastSyncTs by viewModel.lastSyncTimestamp.collectAsState()
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
@@ -82,6 +87,18 @@ fun UangkuMainApp(viewModel: UangkuViewModel) {
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.primary
                     )
+                },
+                actions = {
+                    IconButton(
+                        onClick = { showDriveSyncDialog = true },
+                        modifier = Modifier.testTag("topbar_drive_sync_button")
+                    ) {
+                        Icon(
+                            imageVector = if (lastSyncTs != null && lastSyncTs!! > 0) Icons.Default.CloudDone else Icons.Default.CloudSync,
+                            contentDescription = "Sinkronisasi Google Drive",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surface
@@ -131,12 +148,20 @@ fun UangkuMainApp(viewModel: UangkuViewModel) {
                 viewModel = viewModel,
                 onAdjustBudgetClick = { showBudgetDialog = true },
                 onSeeAllClick = { currentTab = NavigationTab.HISTORY },
-                onAddRuleClick = { showAddRecurringDialog = true }
+                onAddRuleClick = { showAddRecurringDialog = true },
+                onOpenDriveSync = { showDriveSyncDialog = true }
             )
         }
     }
 
     // Dialogs & Sheets
+    if (showDriveSyncDialog) {
+        GoogleDriveSyncDialog(
+            viewModel = viewModel,
+            onDismiss = { showDriveSyncDialog = false }
+        )
+    }
+
     if (showAddTransactionSheet) {
         AddEditTransactionSheet(
             onDismiss = { showAddTransactionSheet = false },
@@ -175,7 +200,8 @@ private fun MainTabContent(
     viewModel: UangkuViewModel,
     onAdjustBudgetClick: () -> Unit,
     onSeeAllClick: () -> Unit,
-    onAddRuleClick: () -> Unit
+    onAddRuleClick: () -> Unit,
+    onOpenDriveSync: () -> Unit
 ) {
     when (currentTab) {
         NavigationTab.HOME -> HomeScreen(
@@ -194,7 +220,8 @@ private fun MainTabContent(
 
         NavigationTab.AUTOMATION -> AutomationScreen(
             viewModel = viewModel,
-            onAddRuleClick = onAddRuleClick
+            onAddRuleClick = onAddRuleClick,
+            onOpenDriveSync = onOpenDriveSync
         )
     }
 }

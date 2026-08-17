@@ -1,19 +1,23 @@
 package com.example.ui.components
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.PieChart
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.FilterAlt
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.PieChart
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -34,6 +38,7 @@ import com.example.data.model.TransactionCategory
 import com.example.data.model.TransactionEntity
 import com.example.data.model.TransactionType
 import com.example.util.CurrencyFormatter
+import java.util.Locale
 import kotlin.math.atan2
 
 data class CategoryExpenseItem(
@@ -48,10 +53,12 @@ data class CategoryExpenseItem(
 @Composable
 fun ExpensePieChartCard(
     transactions: List<TransactionEntity>,
+    selectedCategory: TransactionCategory? = null,
+    onCategorySelected: ((TransactionCategory?) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     var isExpanded by remember { mutableStateOf(true) }
-    var selectedCategory by remember { mutableStateOf<TransactionCategory?>(null) }
+    val listState = rememberLazyListState()
 
     // Filter expense transactions only
     val expenseTransactions = remember(transactions) {
@@ -86,6 +93,16 @@ fun ExpensePieChartCard(
                     startAngle = start,
                     sweepAngle = sweep
                 )
+            }
+        }
+    }
+
+    // Auto-scroll the list when category is selected via chart tap
+    LaunchedEffect(selectedCategory) {
+        if (selectedCategory != null && categoryItems.isNotEmpty()) {
+            val index = categoryItems.indexOfFirst { it.category == selectedCategory }
+            if (index >= 0) {
+                listState.animateScrollToItem(index)
             }
         }
     }
@@ -143,13 +160,13 @@ fun ExpensePieChartCard(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(top = 12.dp)
+                        .padding(top = 10.dp)
                 ) {
                     if (categoryItems.isEmpty()) {
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(100.dp),
+                                .height(90.dp),
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
@@ -162,67 +179,65 @@ fun ExpensePieChartCard(
                     } else {
                         val activeItem = categoryItems.find { it.category == selectedCategory }
 
-                        // Row containing Donut Canvas & Category Details
+                        // Row containing Donut Canvas & Category Scrollable List
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceAround
+                            horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             // Donut Canvas Chart
                             Box(
-                                modifier = Modifier.size(140.dp),
+                                modifier = Modifier
+                                    .size(135.dp)
+                                    .padding(2.dp),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Canvas(
                                     modifier = Modifier
                                         .size(130.dp)
-                                        .pointerInput(categoryItems) {
+                                        .pointerInput(categoryItems, selectedCategory) {
                                             detectTapGestures { offset ->
                                                 val center = Offset(size.width / 2f, size.height / 2f)
                                                 val dx = offset.x - center.x
                                                 val dy = offset.y - center.y
-                                                var angle = Math.toDegrees(atan2(dy.toDouble(), dx.toDouble())).toFloat()
-                                                if (angle < 0) angle += 360f
+                                                val distance = Math.hypot(dx.toDouble(), dy.toDouble()).toFloat()
+                                                val radius = size.width / 2f
 
-                                                // Find clicked slice (-90 offset normalized)
-                                                val clicked = categoryItems.find { item ->
-                                                    var start = item.startAngle
-                                                    var end = item.startAngle + item.sweepAngle
-
-                                                    // Normalize angles to 0..360 range
-                                                    fun norm(a: Float): Float {
-                                                        var v = a % 360f
-                                                        if (v < 0) v += 360f
-                                                        return v
+                                                // If center hole is clicked when filtered, reset filter
+                                                if (distance < radius * 0.42f) {
+                                                    if (selectedCategory != null) {
+                                                        onCategorySelected?.invoke(null)
                                                     }
-
-                                                    val normStart = norm(start)
-                                                    val normEnd = norm(end)
-
-                                                    if (normStart <= normEnd) {
-                                                        angle in normStart..normEnd
-                                                    } else {
-                                                        angle >= normStart || angle <= normEnd
-                                                    }
+                                                    return@detectTapGestures
                                                 }
 
-                                                selectedCategory = if (clicked?.category == selectedCategory) null else clicked?.category
+                                                if (distance <= radius * 1.3f) {
+                                                    var angle = Math.toDegrees(atan2(dy.toDouble(), dx.toDouble())).toFloat()
+                                                    if (angle < -90f) angle += 360f
+
+                                                    val clicked = categoryItems.find { item ->
+                                                        angle >= item.startAngle && angle < (item.startAngle + item.sweepAngle)
+                                                    }
+
+                                                    val newCategory = if (clicked?.category == selectedCategory) null else clicked?.category
+                                                    onCategorySelected?.invoke(newCategory)
+                                                }
                                             }
                                         }
                                 ) {
-                                    val strokeWidth = 26.dp.toPx()
+                                    val strokeWidth = 22.dp.toPx()
                                     val chartSize = Size(size.width - strokeWidth, size.height - strokeWidth)
                                     val topLeft = Offset(strokeWidth / 2f, strokeWidth / 2f)
 
                                     categoryItems.forEach { item ->
                                         val isSelected = item.category == selectedCategory
-                                        val width = if (isSelected) strokeWidth * 1.25f else strokeWidth
-                                        val color = if (selectedCategory == null || isSelected) item.color else item.color.copy(alpha = 0.35f)
+                                        val width = if (isSelected) strokeWidth * 1.3f else strokeWidth
+                                        val color = if (selectedCategory == null || isSelected) item.color else item.color.copy(alpha = 0.30f)
 
                                         drawArc(
                                             color = color,
                                             startAngle = item.startAngle,
-                                            sweepAngle = item.sweepAngle - 1.5f, // subtle gap
+                                            sweepAngle = (item.sweepAngle - 1.5f).coerceAtLeast(0.5f),
                                             useCenter = false,
                                             topLeft = topLeft,
                                             size = chartSize,
@@ -234,20 +249,34 @@ fun ExpensePieChartCard(
                                 // Center Donut Label
                                 Column(
                                     horizontalAlignment = Alignment.CenterHorizontally,
-                                    modifier = Modifier.padding(8.dp)
+                                    modifier = Modifier
+                                        .clip(CircleShape)
+                                        .clickable {
+                                            if (selectedCategory != null) {
+                                                onCategorySelected?.invoke(null)
+                                            }
+                                        }
+                                        .padding(4.dp)
                                 ) {
                                     if (activeItem != null) {
                                         Text(
                                             text = activeItem.category.displayName,
-                                            style = MaterialTheme.typography.labelSmall,
+                                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                                             maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis
+                                            overflow = TextOverflow.Ellipsis,
+                                            textAlign = TextAlign.Center
                                         )
                                         Text(
-                                            text = "${String.format("%.1f", activeItem.percentage)}%",
-                                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                            text = "${String.format(Locale.getDefault(), "%.1f", activeItem.percentage)}%",
+                                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold, fontSize = 15.sp),
                                             color = activeItem.color
+                                        )
+                                        Text(
+                                            text = CurrencyFormatter.formatRupiah(activeItem.amount),
+                                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp, fontWeight = FontWeight.SemiBold),
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                            maxLines = 1
                                         )
                                     } else {
                                         Text(
@@ -271,91 +300,83 @@ fun ExpensePieChartCard(
                                 }
                             }
 
-                            // Category Breakdown Legend List (Top 4 + Others)
-                            Column(
+                            // Category Breakdown Scrollable Legend List (Fixed height ~ 4 items max, scrollable)
+                            val listHeight = if (categoryItems.size <= 3) {
+                                (categoryItems.size * 36 + (categoryItems.size - 1).coerceAtLeast(0) * 4).dp
+                            } else {
+                                146.dp
+                            }
+
+                            LazyColumn(
+                                state = listState,
                                 modifier = Modifier
                                     .weight(1f)
-                                    .padding(start = 12.dp),
-                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                                    .height(listHeight)
+                                    .padding(start = 10.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
                             ) {
-                                categoryItems.take(4).forEach { item ->
+                                itemsIndexed(
+                                    items = categoryItems,
+                                    key = { _, item -> item.category.name }
+                                ) { _, item ->
                                     val isSelected = item.category == selectedCategory
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .clip(RoundedCornerShape(6.dp))
-                                            .clickable {
-                                                selectedCategory = if (isSelected) null else item.category
-                                            }
-                                            .background(
-                                                if (isSelected) item.color.copy(alpha = 0.15f) else Color.Transparent
-                                            )
-                                            .padding(vertical = 3.dp, horizontal = 4.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.SpaceBetween
-                                    ) {
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            modifier = Modifier.weight(1f)
-                                        ) {
-                                            Box(
-                                                modifier = Modifier
-                                                    .size(10.dp)
-                                                    .background(item.color, CircleShape)
-                                            )
-                                            Spacer(modifier = Modifier.width(6.dp))
-                                            Text(
-                                                text = item.category.displayName,
-                                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
-                                                color = MaterialTheme.colorScheme.onSurface,
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis
-                                            )
+                                    CategoryLegendItemRow(
+                                        item = item,
+                                        isSelected = isSelected,
+                                        onClick = {
+                                            val newCat = if (isSelected) null else item.category
+                                            onCategorySelected?.invoke(newCat)
                                         }
+                                    )
+                                }
+                            }
+                        }
 
+                        // Active filter banner inside card
+                        if (selectedCategory != null) {
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 10.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.FilterAlt,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
                                         Text(
-                                            text = "${String.format("%.0f", item.percentage)}%",
-                                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                            color = if (isSelected) item.color else MaterialTheme.colorScheme.onSurfaceVariant,
-                                            modifier = Modifier.padding(start = 4.dp)
+                                            text = "Memfilter Kategori: ${selectedCategory.displayName}",
+                                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
                                         )
                                     }
-                                }
 
-                                if (categoryItems.size > 4) {
-                                    val otherSum = categoryItems.drop(4).sumOf { it.amount }
-                                    val otherPct = (otherSum / totalExpense) * 100
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(vertical = 2.dp, horizontal = 4.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    IconButton(
+                                        onClick = { onCategorySelected?.invoke(null) },
+                                        modifier = Modifier.size(24.dp)
                                     ) {
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            modifier = Modifier.weight(1f)
-                                        ) {
-                                            Box(
-                                                modifier = Modifier
-                                                    .size(10.dp)
-                                                    .background(Color.Gray, CircleShape)
-                                            )
-                                            Spacer(modifier = Modifier.width(6.dp))
-                                            Text(
-                                                text = "Kategori Lainnya (${categoryItems.size - 4})",
-                                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis
-                                            )
-                                        }
-
-                                        Text(
-                                            text = "${String.format("%.0f", otherPct)}%",
-                                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            modifier = Modifier.padding(start = 4.dp)
+                                        Icon(
+                                            imageVector = Icons.Default.Close,
+                                            contentDescription = "Hapus Filter Kategori",
+                                            tint = MaterialTheme.colorScheme.error,
+                                            modifier = Modifier.size(16.dp)
                                         )
                                     }
                                 }
@@ -363,6 +384,69 @@ fun ExpensePieChartCard(
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CategoryLegendItemRow(
+    item: CategoryExpenseItem,
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
+    Surface(
+        shape = RoundedCornerShape(8.dp),
+        color = if (isSelected) item.color.copy(alpha = 0.20f) else MaterialTheme.colorScheme.surface.copy(alpha = 0.75f),
+        border = if (isSelected) BorderStroke(1.5.dp, item.color) else null,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .clickable(onClick = onClick)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp, vertical = 5.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.weight(1f)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(10.dp)
+                        .background(item.color, CircleShape)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = item.category.displayName,
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        fontSize = 11.5.sp,
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                    ),
+                    color = if (isSelected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            Column(horizontalAlignment = Alignment.End) {
+                Text(
+                    text = "${String.format(Locale.getDefault(), "%.1f", item.percentage)}%",
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 11.sp
+                    ),
+                    color = if (isSelected) item.color else MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = CurrencyFormatter.formatRupiah(item.amount),
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
     }

@@ -47,6 +47,7 @@ fun HistoryScreen(
     val endDateFilter by viewModel.endDateFilter.collectAsState()
 
     val filteredTransactions by viewModel.filteredTransactions.collectAsState()
+    val periodTransactions by viewModel.periodTransactions.collectAsState()
 
     val context = LocalContext.current
     var transactionToDelete by remember { mutableStateOf<TransactionEntity?>(null) }
@@ -328,12 +329,18 @@ fun HistoryScreen(
         }
 
         item {
-            // Pie Chart Visualisation
-            ExpensePieChartCard(transactions = filteredTransactions)
+            // Pie Chart Visualisation with Interactive Category Selection
+            ExpensePieChartCard(
+                transactions = periodTransactions,
+                selectedCategory = selectedCategoryFilter,
+                onCategorySelected = { cat ->
+                    viewModel.selectedCategoryFilter.value = cat
+                }
+            )
         }
 
         item {
-            // Filter Chips Row (Semua, Pengeluaran, Pemasukan)
+            // Filter Chips Row (Semua, Pengeluaran, Pemasukan + Active Category Filter)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
@@ -370,23 +377,79 @@ fun HistoryScreen(
                             label = { Text("Pemasukan", maxLines = 1, style = MaterialTheme.typography.labelMedium) }
                         )
                     }
+
+                    selectedCategoryFilter?.let { cat ->
+                        item {
+                            FilterChip(
+                                selected = true,
+                                onClick = { viewModel.selectedCategoryFilter.value = null },
+                                label = {
+                                    Text(
+                                        text = "Kategori: ${cat.displayName}",
+                                        maxLines = 1,
+                                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold)
+                                    )
+                                },
+                                trailingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Default.Clear,
+                                        contentDescription = "Hapus filter kategori",
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                    selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                            )
+                        }
+                    }
                 }
             }
         }
 
         if (filteredTransactions.isEmpty()) {
             item {
-                Box(
+                Card(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = 32.dp),
-                    contentAlignment = Alignment.Center
+                        .padding(vertical = 20.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
                 ) {
-                    Text(
-                        text = "Tidak ada catatan transaksi ditemukan.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = if (selectedCategoryFilter != null) {
+                                "Tidak ada transaksi untuk kategori \"${selectedCategoryFilter?.displayName}\"."
+                            } else {
+                                "Tidak ada catatan transaksi ditemukan pada filter ini."
+                            },
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        )
+
+                        if (selectedCategoryFilter != null || selectedTypeFilter != null || startDateFilter != null || endDateFilter != null || searchQuery.isNotEmpty()) {
+                            OutlinedButton(
+                                onClick = {
+                                    viewModel.selectedCategoryFilter.value = null
+                                    viewModel.selectedTypeFilter.value = null
+                                    viewModel.startDateFilter.value = null
+                                    viewModel.endDateFilter.value = null
+                                    viewModel.searchQuery.value = ""
+                                },
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                Text("Reset Semua Filter", style = MaterialTheme.typography.labelMedium)
+                            }
+                        }
+                    }
                 }
             }
         } else {

@@ -22,9 +22,7 @@ class UangkuViewModel(application: Application) : AndroidViewModel(application) 
 
     // Quick text input state
     val quickInputText = MutableStateFlow("")
-    val parsedQuickTransaction: StateFlow<ParsedTransaction?> = quickInputText
-        .map { QuickTextParser.parse(it) }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+    val parsedQuickTransaction: StateFlow<ParsedTransaction?>
 
     val autoProcessedBannerMessage = MutableStateFlow<String?>(null)
 
@@ -36,6 +34,7 @@ class UangkuViewModel(application: Application) : AndroidViewModel(application) 
     val endDateFilter = MutableStateFlow<Long?>(null)
 
     val filteredTransactions: StateFlow<List<TransactionEntity>>
+    val periodTransactions: StateFlow<List<TransactionEntity>>
 
     // Calculations
     val totalBalance: StateFlow<Double>
@@ -54,6 +53,13 @@ class UangkuViewModel(application: Application) : AndroidViewModel(application) 
 
         transactions = repository.allTransactions
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+        parsedQuickTransaction = combine(
+            quickInputText,
+            transactions
+        ) { text, historyList ->
+            QuickTextParser.parse(text, historyList)
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
         recurringRules = repository.allRecurringRules
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -94,6 +100,28 @@ class UangkuViewModel(application: Application) : AndroidViewModel(application) 
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0.0)
 
         val dateRangeFlow = combine(startDateFilter, endDateFilter) { start, end -> Pair(start, end) }
+
+        periodTransactions = combine(
+            transactions,
+            searchQuery,
+            selectedTypeFilter,
+            dateRangeFlow
+        ) { txs, query, type, dateRange ->
+            val (startMs, endMs) = dateRange
+            txs.filter { tx ->
+                val matchesQuery = query.isEmpty() ||
+                        tx.title.contains(query, ignoreCase = true) ||
+                        tx.note.contains(query, ignoreCase = true) ||
+                        tx.category.displayName.contains(query, ignoreCase = true) ||
+                        tx.paymentMethod.displayName.contains(query, ignoreCase = true)
+
+                val matchesType = type == null || tx.type == type
+                val matchesStart = startMs == null || tx.timestamp >= startMs
+                val matchesEnd = endMs == null || tx.timestamp <= endMs
+
+                matchesQuery && matchesType && matchesStart && matchesEnd
+            }
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
         filteredTransactions = combine(
             transactions,
@@ -290,6 +318,88 @@ class UangkuViewModel(application: Application) : AndroidViewModel(application) 
 
             if (addedCount > 0) {
                 autoProcessedBannerMessage.value = "Terdeteksi $addedCount transaksi rutin harian berhasil dicatat otomatis!"
+            }
+        }
+    }
+
+    private val prefs = application.getSharedPreferences("uangku_prefs", android.content.Context.MODE_PRIVATE)
+
+    val lastSyncTimestamp = MutableStateFlow<Long?>(
+        if (prefs.contains("last_sync_timestamp")) prefs.getLong("last_sync_timestamp", 0L) else null
+    )
+
+    val syncErrorMessage = MutableStateFlow<String?>(null)
+    val syncSuccessMessage = MutableStateFlow<String?>(null)
+
+    fun updateLastSyncTimestamp(timestamp: Long = System.currentTimeMillis()) {
+        prefs.edit().putLong("last_sync_timestamp", timestamp).apply()
+        lastSyncTimestamp.value = timestamp
+        syncErrorMessage.value = null
+        syncSuccessMessage.value = "Pencadangan ke Google Drive berhasil disinkronkan!"
+    }
+
+    fun setSyncError(message: String?) {
+        syncErrorMessage.value = message
+        syncSuccessMessage.value = null
+    }
+
+    fun clearSyncStatus() {
+        syncErrorMessage.value = null
+        syncSuccessMessage.value = null
+    }
+
+    fun generateBackupJson(): String {
+        val currentTxs = transactions.value
+        val currentBudget = budget.value
+        val currentRules = recurringRules.value
+        return com.example.util.BackupSyncManager.generateBackupJson(currentTxs, currentBudget, currentRules)
+    }
+
+    fun restoreBackup(
+        backupData: com.example.util.BackupData,
+        mergeMode: Boolean,
+        onComplete: (Boolean, Int) -> Unit
+    ) {
+        viewModelScope.launch {
+            try {
+                if (!mergeMode) {
+                    repository.clearAllTransactions()
+                }
+
+                // Restore budget if provided
+                backupData.budget?.let { b ->
+                    repository.setBudget(
+                        daily = b.dailyLimit,
+                        monthly = b.monthlyLimit,
+                        minBalance = b.minBalanceThreshold,
+                        savingsTarget = b.monthlySavingsTarget
+                    )
+                }
+
+                // Restore transactions
+                var restoredCount = 0
+                val existingTxs = repository.allTransactions.firstOrNull() ?: emptyList()
+                val existingIds = existingTxs.map { it.id }.toSet()
+
+                backupData.transactions.forEach { tx ->
+                    if (!mergeMode || !existingIds.contains(tx.id)) {
+                        // Insert as new record if merged or replacing
+                        val txToInsert = if (!mergeMode) tx else tx.copy(id = 0)
+                        repository.insertTransaction(txToInsert)
+                        restoredCount++
+                    }
+                }
+
+                // Restore rules
+                backupData.recurringRules.forEach { rule ->
+                    repository.insertRecurringRule(rule.copy(id = 0))
+                }
+
+                updateLastSyncTimestamp()
+                onComplete(true, restoredCount)
+            } catch (e: Exception) {
+                e.printStackTrace()
+                onComplete(false, 0)
             }
         }
     }

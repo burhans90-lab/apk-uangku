@@ -24,6 +24,7 @@ import com.example.data.model.TransactionCategory
 import com.example.data.model.TransactionEntity
 import com.example.data.model.TransactionType
 import com.example.util.CurrencyFormatter
+import com.example.util.QuickTextParser
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -33,6 +34,7 @@ fun AddEditTransactionSheet(
     onSave: (String, Double, TransactionType, TransactionCategory, PaymentMethod, String) -> Unit
 ) {
     var title by remember { mutableStateOf(initialTransaction?.title ?: "") }
+    var isCategoryManuallySelected by remember { mutableStateOf(initialTransaction != null) }
     var amountFieldValue by remember { 
         val initialText = if (initialTransaction != null) CurrencyFormatter.formatDigitsWithDots(initialTransaction.amount.toLong().toString()) else ""
         mutableStateOf(TextFieldValue(text = initialText, selection = TextRange(initialText.length)))
@@ -186,10 +188,18 @@ fun AddEditTransactionSheet(
 
             OutlinedTextField(
                 value = title,
-                onValueChange = { title = it },
+                onValueChange = { newTitle ->
+                    title = newTitle
+                    if (!isCategoryManuallySelected && newTitle.isNotBlank() && selectedType == TransactionType.EXPENSE) {
+                        val detected = QuickTextParser.detectCategory(newTitle, selectedType)
+                        if (detected != TransactionCategory.LAINNYA) {
+                            selectedCategory = detected
+                        }
+                    }
+                },
                 label = { Text("Judul Transaksi") },
                 placeholder = {
-                    Text(if (selectedType == TransactionType.INCOME) "mis. Gaji Bulan Ini" else "mis. Beli Token Listrik")
+                    Text(if (selectedType == TransactionType.INCOME) "mis. Gaji Bulan Ini" else "mis. Beli Token Listrik / Es Teh")
                 },
                 modifier = Modifier
                     .fillMaxWidth()
@@ -254,7 +264,10 @@ fun AddEditTransactionSheet(
                     items(expenseCategories) { cat ->
                         FilterChip(
                             selected = selectedCategory == cat,
-                            onClick = { selectedCategory = cat },
+                            onClick = {
+                                selectedCategory = cat
+                                isCategoryManuallySelected = true
+                            },
                             label = { Text(cat.displayName) },
                             leadingIcon = {
                                 Icon(imageVector = cat.getIcon(), contentDescription = null, modifier = Modifier.size(16.dp))

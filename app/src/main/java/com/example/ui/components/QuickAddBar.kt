@@ -13,6 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.example.util.CurrencyFormatter
 import com.example.util.ParsedTransaction
 
@@ -84,8 +85,8 @@ fun QuickAddBar(
             parsed?.let { p ->
                 Spacer(modifier = Modifier.height(10.dp))
                 Surface(
-                    shape = RoundedCornerShape(10.dp),
-                    color = MaterialTheme.colorScheme.secondaryContainer,
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.85f),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(
@@ -95,21 +96,55 @@ fun QuickAddBar(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Column(
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier
                                 .weight(1f)
                                 .padding(end = 8.dp)
                         ) {
-                            Text(
-                                text = "Terdeteksi:",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f)
-                            )
-                            Text(
-                                text = "${p.title} (${p.category.displayName})",
-                                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
-                                color = MaterialTheme.colorScheme.onSecondaryContainer
-                            )
+                            Box(
+                                modifier = Modifier
+                                    .size(32.dp)
+                                    .background(
+                                        color = androidx.compose.ui.graphics.Color(p.category.colorHex).copy(alpha = 0.2f),
+                                        shape = androidx.compose.foundation.shape.CircleShape
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = p.category.getIcon(),
+                                    contentDescription = null,
+                                    tint = androidx.compose.ui.graphics.Color(p.category.colorHex),
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = if (p.matchedFromHistory) "Memori Riwayat" else "Kategori Otomatis",
+                                        style = MaterialTheme.typography.labelSmall.copy(
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Medium
+                                        ),
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                    if (p.matchedFromHistory) {
+                                        Text(
+                                            text = " • Sesuai Kebiasaan",
+                                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                                            color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f)
+                                        )
+                                    }
+                                }
+                                Text(
+                                    text = "${p.title} (${p.category.displayName})",
+                                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                    maxLines = 1,
+                                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                )
+                            }
                         }
 
                         Text(
